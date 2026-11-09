@@ -14,7 +14,7 @@ DOCS_DIR = PROJECT_ROOT / "data" / "docs"
 INDEX_DIR = PROJECT_ROOT / "data" / "index"
 INDEX_FILE = INDEX_DIR / "faiss.index"   # the vectors
 CHUNKS_FILE = INDEX_DIR / "chunks.json"  # the text + source of each vector
-
+DB_FILE = PROJECT_ROOT / "data" / "projects.db"
 # --- Environment -----------------------------------------------------------
 # Reads .env from the project root into environment variables.
 # If .env is missing, nothing breaks; defaults below are used.

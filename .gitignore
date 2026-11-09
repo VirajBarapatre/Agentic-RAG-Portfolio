@@ -15,3 +15,4 @@ data/index/
 # Editor / OS
 .vscode/
 .DS_Store
+data/projects.db
