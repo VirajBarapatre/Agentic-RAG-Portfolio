@@ -1,0 +1,17 @@
+# Secrets: never commit
+.env
+
+# Virtual environment
+venv/
+.venv/
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Built FAISS index (rebuilt by running ingest)
+data/index/
+
+# Editor / OS
+.vscode/
+.DS_Store
