@@ -22,8 +22,9 @@ load_dotenv(PROJECT_ROOT / ".env")
 
 # Model name is not a secret, so it has a default.
 # The API key is NOT read here; it is only needed from Milestone 2.
-GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.1-8b-instant")
-
+GROQ_MODEL = os.getenv("GROQ_MODEL", "openai/gpt-oss-20b")
+# Seconds to wait for one LLM reply before giving up.
+LLM_TIMEOUT_SECONDS = 30
 # --- Chunking --------------------------------------------------------------
 # Measured in characters. Carried over from Ask My Portfolio: 400/50 split
 # dense sections mid-topic, 600/100 kept related lines together.
