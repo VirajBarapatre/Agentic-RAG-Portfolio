@@ -1,7 +1,7 @@
 """The agent: an LLM that decides which tools to call, in a LangGraph loop."""
 
 from groq import BadRequestError
-from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph import END, START, MessagesState, StateGraph
 from langgraph.prebuilt import ToolNode
@@ -11,7 +11,10 @@ from src.tools.agent_tools import ALL_TOOLS
 
 MAX_TOOL_CALLS = 4  # per question
 
-SYSTEM_PROMPT = """You answer questions about Viraj Barapatre's projects using tools.
+# The one refusal sentence. The prompt, the fallback and the eval scorer all use it.
+REFUSAL_PHRASE = "I don't know based on my documents."
+
+SYSTEM_PROMPT = f"""You answer questions about Viraj Barapatre's projects using tools.
 
 Tools:
 - rag_search: details from project READMEs (what a project does, tech stack, dataset, results).
@@ -20,8 +23,8 @@ Tools:
 
 Rules:
 1. Answer only from tool results in this conversation. Never use outside knowledge about Viraj's projects.
-2. If the tool results do not contain the answer, reply "I don't know based on my documents." Do not guess.
-3. If the question is not about Viraj's projects at all, refuse briefly without calling any tool.
+2. If the tool results do not contain the answer, reply exactly "{REFUSAL_PHRASE}" Do not guess.
+3. If the question is not about Viraj's projects at all, reply exactly "{REFUSAL_PHRASE}" without calling any tool.
 4. A number in a search passage belongs to the project in that passage's source file. Never attribute it to a different project.
 5. Use the calculator for every calculation.
 6. Keep answers short and say which project each fact comes from.
@@ -29,11 +32,8 @@ Rules:
 
 LIMIT_NOTE = (
     "Tool-call limit reached. Answer now using only the tool results above, "
-    'or reply "I don\'t know based on my documents."'
+    f'or reply exactly "{REFUSAL_PHRASE}"'
 )
-
-# Used when the model cannot produce a final answer within the limit.
-FALLBACK_ANSWER = "I don't know based on my documents."
 
 
 def _tool_calls_this_turn(messages: list) -> int:
@@ -54,14 +54,14 @@ def build_agent():
     llm_no_tools = llm.bind_tools(ALL_TOOLS, tool_choice="none")
 
     def final_answer(messages: list) -> AIMessage:
-        """At the tool limit: ask for a final answer; if the model still wants tools, use the fallback."""
+        """At the tool limit: ask for a final answer; if the model still wants tools, refuse."""
         try:
             response = llm_no_tools.invoke(messages + [SystemMessage(LIMIT_NOTE)])
         except BadRequestError:
             # Groq rejects the request when the model calls a tool despite tool_choice="none".
-            return AIMessage(FALLBACK_ANSWER)
+            return AIMessage(REFUSAL_PHRASE)
         if response.tool_calls:
-            return AIMessage(FALLBACK_ANSWER)
+            return AIMessage(REFUSAL_PHRASE)
         return response
 
     def agent_node(state: MessagesState) -> dict:
@@ -87,10 +87,29 @@ def build_agent():
     return builder.compile(checkpointer=InMemorySaver())
 
 
-def ask(agent, question: str, thread_id: str) -> str:
-    """Send one question in a conversation (thread) and return the final answer text."""
+def run_question(agent, question: str, thread_id: str) -> dict:
+    """Ask one question and return the answer plus a record of this turn."""
     result = agent.invoke(
         {"messages": [HumanMessage(question)]},
         config={"configurable": {"thread_id": thread_id}},
     )
-    return result["messages"][-1].content
+    messages = result["messages"]
+    last_question = max(i for i, m in enumerate(messages) if isinstance(m, HumanMessage))
+    turn = messages[last_question + 1:]
+
+    ai_messages = [m for m in turn if isinstance(m, AIMessage)]
+    tool_calls = [call for m in ai_messages for call in m.tool_calls]
+    usage = [m.usage_metadata for m in ai_messages if m.usage_metadata]
+    return {
+        "answer": turn[-1].content,
+        "tools_used": [call["name"] for call in tool_calls],
+        "tool_args": [call["args"] for call in tool_calls],
+        "tool_outputs": [m.content for m in turn if isinstance(m, ToolMessage)],
+        "input_tokens": sum(u["input_tokens"] for u in usage),
+        "output_tokens": sum(u["output_tokens"] for u in usage),
+    }
+
+
+def ask(agent, question: str, thread_id: str) -> str:
+    """Send one question in a conversation (thread) and return only the answer text."""
+    return run_question(agent, question, thread_id)["answer"]
