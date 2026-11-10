@@ -1,7 +1,7 @@
 """Scoring functions for the evaluation. Pure Python: no LLM, no network, no files."""
 
 import re
-
+import unicodedata
 from src.config import REFUSAL_PHRASE
 
 NUMBER_TOLERANCE = 0.01
@@ -15,8 +15,10 @@ NUMBER_WORDS = {
 
 
 def normalize(text: str) -> str:
-    """Lowercase, straighten curly quotes, and drop citation markers like 【1】."""
+    """Make text comparable: plain spaces and hyphens, lowercase, straight quotes, no 【1】 markers."""
+    text = unicodedata.normalize("NFKC", text)  # non-breaking spaces -> normal spaces
     text = text.lower().replace("\u2019", "'").replace("\u2018", "'")
+    text = text.replace("\u2010", "-").replace("\u2011", "-")  # unicode hyphens -> "-"
     return re.sub(r"\u3010[^\u3011]*\u3011", " ", text)
 
 
