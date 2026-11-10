@@ -1,5 +1,6 @@
 """The agent: an LLM that decides which tools to call, in a LangGraph loop."""
 
+from groq import BadRequestError
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph import END, START, MessagesState, StateGraph
@@ -31,6 +32,9 @@ LIMIT_NOTE = (
     'or reply "I don\'t know based on my documents."'
 )
 
+# Used when the model cannot produce a final answer within the limit.
+FALLBACK_ANSWER = "I don't know based on my documents."
+
 
 def _tool_calls_this_turn(messages: list) -> int:
     """Count tool calls made since the user's latest question."""
@@ -47,12 +51,23 @@ def build_agent():
     """Build the agent graph: agent node <-> tools node, with memory."""
     llm = get_llm()
     llm_with_tools = llm.bind_tools(ALL_TOOLS)
-    llm_no_tools = llm.bind_tools(ALL_TOOLS, tool_choice="none")  # can see tools, cannot call them
+    llm_no_tools = llm.bind_tools(ALL_TOOLS, tool_choice="none")
+
+    def final_answer(messages: list) -> AIMessage:
+        """At the tool limit: ask for a final answer; if the model still wants tools, use the fallback."""
+        try:
+            response = llm_no_tools.invoke(messages + [SystemMessage(LIMIT_NOTE)])
+        except BadRequestError:
+            # Groq rejects the request when the model calls a tool despite tool_choice="none".
+            return AIMessage(FALLBACK_ANSWER)
+        if response.tool_calls:
+            return AIMessage(FALLBACK_ANSWER)
+        return response
 
     def agent_node(state: MessagesState) -> dict:
         messages = [SystemMessage(SYSTEM_PROMPT)] + state["messages"]
         if _tool_calls_this_turn(state["messages"]) >= MAX_TOOL_CALLS:
-            response = llm_no_tools.invoke(messages + [SystemMessage(LIMIT_NOTE)])
+            response = final_answer(messages)
         else:
             response = llm_with_tools.invoke(messages)
         return {"messages": [response]}
