@@ -6,13 +6,11 @@ from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph import END, START, MessagesState, StateGraph
 from langgraph.prebuilt import ToolNode
 
+from src.config import REFUSAL_PHRASE
 from src.llm import get_llm
 from src.tools.agent_tools import ALL_TOOLS
 
 MAX_TOOL_CALLS = 4  # per question
-
-# The one refusal sentence. The prompt, the fallback and the eval scorer all use it.
-REFUSAL_PHRASE = "I don't know based on my documents."
 
 SYSTEM_PROMPT = f"""You answer questions about Viraj Barapatre's projects using tools.
 
