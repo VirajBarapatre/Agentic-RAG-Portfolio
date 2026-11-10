@@ -1,0 +1,81 @@
+"""The agent: an LLM that decides which tools to call, in a LangGraph loop."""
+
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
+from langgraph.checkpoint.memory import InMemorySaver
+from langgraph.graph import END, START, MessagesState, StateGraph
+from langgraph.prebuilt import ToolNode
+
+from src.llm import get_llm
+from src.tools.agent_tools import ALL_TOOLS
+
+MAX_TOOL_CALLS = 4  # per question
+
+SYSTEM_PROMPT = """You answer questions about Viraj Barapatre's projects using tools.
+
+Tools:
+- rag_search: details from project READMEs (what a project does, tech stack, dataset, results).
+- sql_query: the `projects` table, for lists, counts, filters and comparisons across projects.
+- calculator: any arithmetic.
+
+Rules:
+1. Answer only from tool results in this conversation. Never use outside knowledge about Viraj's projects.
+2. If the tool results do not contain the answer, reply "I don't know based on my documents." Do not guess.
+3. If the question is not about Viraj's projects at all, refuse briefly without calling any tool.
+4. A number in a search passage belongs to the project in that passage's source file. Never attribute it to a different project.
+5. Use the calculator for every calculation.
+6. Keep answers short and say which project each fact comes from.
+"""
+
+LIMIT_NOTE = (
+    "Tool-call limit reached. Answer now using only the tool results above, "
+    'or reply "I don\'t know based on my documents."'
+)
+
+
+def _tool_calls_this_turn(messages: list) -> int:
+    """Count tool calls made since the user's latest question."""
+    count = 0
+    for message in reversed(messages):
+        if isinstance(message, HumanMessage):
+            break
+        if isinstance(message, AIMessage):
+            count += len(message.tool_calls)
+    return count
+
+
+def build_agent():
+    """Build the agent graph: agent node <-> tools node, with memory."""
+    llm = get_llm()
+    llm_with_tools = llm.bind_tools(ALL_TOOLS)
+    llm_no_tools = llm.bind_tools(ALL_TOOLS, tool_choice="none")  # can see tools, cannot call them
+
+    def agent_node(state: MessagesState) -> dict:
+        messages = [SystemMessage(SYSTEM_PROMPT)] + state["messages"]
+        if _tool_calls_this_turn(state["messages"]) >= MAX_TOOL_CALLS:
+            response = llm_no_tools.invoke(messages + [SystemMessage(LIMIT_NOTE)])
+        else:
+            response = llm_with_tools.invoke(messages)
+        return {"messages": [response]}
+
+    def route_after_agent(state: MessagesState) -> str:
+        """If the LLM asked for tools, run them; otherwise the answer is final."""
+        if state["messages"][-1].tool_calls:
+            return "tools"
+        return END
+
+    builder = StateGraph(MessagesState)
+    builder.add_node("agent", agent_node)
+    builder.add_node("tools", ToolNode(ALL_TOOLS))
+    builder.add_edge(START, "agent")
+    builder.add_conditional_edges("agent", route_after_agent, ["tools", END])
+    builder.add_edge("tools", "agent")
+    return builder.compile(checkpointer=InMemorySaver())
+
+
+def ask(agent, question: str, thread_id: str) -> str:
+    """Send one question in a conversation (thread) and return the final answer text."""
+    result = agent.invoke(
+        {"messages": [HumanMessage(question)]},
+        config={"configurable": {"thread_id": thread_id}},
+    )
+    return result["messages"][-1].content
