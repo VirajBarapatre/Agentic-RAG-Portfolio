@@ -17,7 +17,7 @@ def rag_search_tool(query: str) -> str:
 
     Use for questions about what a project does, how it works, its tech stack,
     dataset, results, or design decisions. Each passage shows its source file.
-    If no passage contains the answer, say so; do not guess.
+    Not every project has a README; if a project is not found here, check sql_query.
     """
     try:
         return format_results(rag_search(query))
