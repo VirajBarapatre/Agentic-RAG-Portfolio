@@ -30,6 +30,12 @@ def load_documents() -> list[dict]:
         documents.append({"source": path.name, "text": text})
     return documents
 
+def document_title(doc: dict) -> str:
+    """The document's first '# ' heading, or its file name if it has none."""
+    for line in doc["text"].splitlines():
+        if line.startswith("# "):
+            return line[2:].strip()
+    return doc["source"]
 
 def chunk_documents(documents: list[dict]) -> list[dict]:
     """Split each document into overlapping chunks, keeping the source filename."""
@@ -40,10 +46,12 @@ def chunk_documents(documents: list[dict]) -> list[dict]:
     )
     chunks = []
     for doc in documents:
+        title = document_title(doc)
         for text in splitter.split_text(doc["text"]):
-            chunks.append({"id": len(chunks), "source": doc["source"], "text": text})
+            # The title gives every chunk its context, e.g. a results table
+            # that never names its project on its own.
+            chunks.append({"id": len(chunks), "source": doc["source"], "text": f"Document: {title}\n\n{text}"})
     return chunks
-
 
 def build_index(chunks: list[dict]) -> faiss.IndexFlatIP:
     """Embed every chunk and store the vectors in a FAISS index."""
