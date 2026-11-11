@@ -83,16 +83,21 @@ def save_chart(groups: dict[str, dict], title: str, path: Path) -> None:
     plt.close(fig)
 
 
+def group_summaries(rows: list[dict]) -> dict[str, dict]:
+    """Summaries per category (skipping empty ones) plus 'all'."""
+    groups = {c: summarize([r for r in rows if r["category"] == c]) for c in CATEGORIES}
+    groups = {name: s for name, s in groups.items() if s["n"] > 0}
+    groups["all"] = summarize(rows)
+    return groups
+
+
 def main() -> None:
     if len(sys.argv) > 1:
         run_file = Path(sys.argv[1])
     else:
         run_file = max(RESULTS_DIR.glob("run_*.csv"))  # timestamps sort, so max = newest
     rows = load_rows(run_file)
-
-    groups = {c: summarize([r for r in rows if r["category"] == c]) for c in CATEGORIES}
-    groups = {name: s for name, s in groups.items() if s["n"] > 0}
-    groups["all"] = summarize(rows)
+    groups = group_summaries(rows)
 
     table = markdown_table(groups)
     model = rows[0]["model"] if rows else "unknown model"
