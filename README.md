@@ -84,8 +84,7 @@ The scorer was checked against real model output. Reading failures found two sco
 6. **Ambiguous questions found after the fact.** Two adversarial questions turned out to depend on judgment ("What does X do?" when only domain and framework are stored; "Why did it reach 99.91% validation accuracy?" when the docs never say why). I did not change them after seeing results.
 7. **CI covers only the deterministic parts** (calculator, SQL tool, scoring). It does not run the agent, the LLM or retrieval.
 8. **Cost limits evaluation.** Groq's free tier allows 200,000 tokens per day; one full run uses about 130,000. Repeated runs to average out noise are not free.
-9. TODO (write in your own words): why "8.43% difference between the brain tumor and skin cancer accuracy" is weaker than it looks.
-
+9. **Correct arithmetic is not a meaningful comparison.** Asked for the difference between the brain tumor and skin cancer accuracy, the agent answers "8.43%". The subtraction is right, but the comparison says little: (a) the unit is 8.43 *percentage points*, not 8.43% (relative to 90 it is about 9.4%); (b) the two models solve different tasks on different data: 2 classes from brain MRI scans vs 7 classes from skin images (HAM10000), so the same accuracy does not mean the same difficulty; (c) the numbers may not measure the same thing: 98.43% is validation accuracy, while the skin cancer README does not say whether its 90% is training, validation or test accuracy; (d) accuracy alone hides class imbalance: in HAM10000 about two-thirds of images are one class (melanocytic nevi), so always predicting that class would already score about 67%, and neither README reports per-class recall. The agent computes the number without these caveats, and the eval scores it as correct, because it checks the arithmetic, not whether the comparison makes sense.
 ## Setup
 
 Requires Python 3.12 and a free Groq API key (https://console.groq.com).
