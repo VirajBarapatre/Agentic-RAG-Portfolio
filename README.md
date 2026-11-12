@@ -45,6 +45,8 @@ Tool errors are returned to the model as text, so a failing tool never crashes a
 
 ![Answer correctness, baseline vs final](results/compare_run_20261110_224454_vs_run_20261112_124537.png)
 
+**Baseline vs final, read carefully:** +5 points (88% -> 92%) comes from two flipped questions. One (`easy-01`) is clearly the effect of Fix 1. The other (`easy-14`) never used retrieval, so its flip is run-to-run variation. A false-premise question (`adv-04`) was fixed in the Fix 1 run and failed again in the final run. The confidently attributable gain is therefore about one question (+2.5 points), at the cost of higher latency (18.1 s -> 20.7 s) and tokens (3075 -> 3316). The variance row in the table above shows how much the same code moves between runs.
+
 All runs: single run each, `openai/gpt-oss-20b`, temperature 0. Raw CSVs, per-run tables and charts are in `results/`.
 
 ### What the fixes did
@@ -147,3 +149,5 @@ tests/               pytest tests (no LLM)
 ## Tech stack
 
 Python 3.12, LangGraph, LangChain Core, Groq (`openai/gpt-oss-20b`), FAISS, sentence-transformers (`all-MiniLM-L6-v2`), SQLite, matplotlib, pytest, GitHub Actions.
+
+**Related project:** [Ask My Portfolio](https://github.com/VirajBarapatre/ask-my-portfolio-rag) is my deployed single-step RAG chatbot ([live demo](https://virajs-ask-my-portfolio.streamlit.app)). This project is the follow-up: a tool-calling agent with an evaluation harness.
